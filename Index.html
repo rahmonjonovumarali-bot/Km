@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D Skaner</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f6f3;--fg:#1c1c1a;--card:#fff;--bd:#d9d9d3;--ac:#0b6e4f;--mut:#6b6b66}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141413;--fg:#ececE6;--card:#1f1f1d;--bd:#3a3a36;--ac:#3ecf9b;--mut:#9a9a92}}
+:root[data-theme="dark"]{--bg:#141413;--fg:#ececE6;--card:#1f1f1d;--bd:#3a3a36;--ac:#3ecf9b;--mut:#9a9a92}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 2px}.s{color:var(--mut);margin:0 0 10px;font-size:14px}
+section{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+h2{font-size:16px;margin:0 0 8px}
+button,.btn{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;display:inline-block}
+button.g,.btn.g{background:transparent;color:var(--fg);border:1px solid var(--bd)}
+button:disabled{opacity:.5}
+.vw{position:relative}
+video,#view{width:100%;border-radius:10px;background:#000;display:block}
+#view{height:min(70vh,520px);touch-action:none}
+#ch{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+#ch i{width:34px;height:34px;border:2px solid #3ecf9b;border-radius:50%;opacity:.8}
+#ring{position:absolute;right:8px;top:8px;width:96px;height:96px;background:rgba(0,0,0,.45);border-radius:50%}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center}
+#th{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
+#th canvas{height:64px;border-radius:6px;border:2px solid var(--ac);flex:none}
+#th canvas.off{opacity:.3;border-color:var(--bd)}
+label{display:block;font-size:13px;color:var(--mut);margin-top:8px}
+input[type=range],select{width:100%}
+#log{color:var(--mut);font-size:13px;min-height:20px}
+progress{width:100%}
+</style>
+</head>
+<body>
+<main>
+<h1>📷 3D Skaner</h1>
+<p class="s">Telefon kamerasi bilan jismni aylanib suratga oling, 3D modelni brauzerning o'zida yarating. API kalit kerak emas.</p>
+
+<section>
+<h2>1. Suratga olish</h2>
+<p class="s"><b>Eng yaxshi usul:</b> «Kamerani yoqish»ni bosing, telefonni <b>tik (portret)</b> tuting, jism doim doira ichida bo'lsin va uni bir xil masofadan aylanib chiqing. Telefon sensori har kadrning joylashuvini o'zi aniqlaydi. Pastdan, yon tomondan va yuqoridan ham aylaning. Jism ostidagi fon bir xil bo'lsa yaxshi.</p>
+<div class="vw"><video id="vid" playsinline muted autoplay hidden></video><div id="ch" hidden><i></i></div><canvas id="ring" width="96" height="96" hidden></canvas></div>
+<div class="row">
+<button id="camBtn" class="g">Kamerani yoqish</button>
+<button id="snap" disabled>Suratga olish</button>
+<button id="auto" class="g" disabled>Avto: o'chiq</button>
+<div style="position:relative;display:inline-block"><span class="btn g">Galereyadan</span><input id="file" type="file" accept="image/*" multiple style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0"></div>
+<div style="position:relative;display:inline-block"><span class="btn g">Tizim kamerasi</span><input id="nat" type="file" accept="image/*" capture="environment" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0"></div>
+<button id="clr" class="g">Tozalash</button>
+</div>
+<div id="clog" class="s" style="color:#d9534f"></div>
+<div id="cnt" class="s">0 ta surat.</div>
+<div id="th"></div>
+<p class="s">Kichik rasmda jism ajratilgan (yorqin) va fon xira ko'rinadi. Noto'g'ri ajratilgan rasmni bosib o'chirib qo'ying. Galereyadagi rasmlarda joylashuv sensori yo'q, shuning uchun natija past bo'ladi.</p>
+</section>
+
+<section>
+<h2>2. Sozlamalar</h2>
+<label>Sifat (kattaroq = aniqroq, sekinroq): <b id="rv">96</b>
+<select id="gres"><option>64</option><option selected>96</option><option>128</option><option>160</option></select></label>
+<label>Xato bardoshliligi: <b id="ov">1</b><input id="tol" type="range" min="0" max="4" value="1"></label>
+<label>Masshtab tuzatish: <b id="sv">1.0</b><input id="scl" type="range" min="0.6" max="1.6" step="0.05" value="1"></label>
+<label>Galereya rasmlari uchun kamera balandligi: <b id="ev">30</b>°<input id="elv" type="range" min="0" max="80" value="30"></label>
+<div class="row"><button id="go">3D modelni yaratish</button></div>
+<progress id="pg" value="0" max="1" hidden></progress>
+<div id="log"></div>
+</section>
+
+<section>
+<h2>3. Natija</h2>
+<canvas id="view"></canvas>
+<p class="s">Aylantirish: suring. Kattalashtirish: ikki barmoq yoki g'ildirak. Ikki marta bosish: avto-aylanish.</p>
+<div class="row"><button id="dl" disabled>HTML yuklab olish</button><button id="dp" class="g" disabled>PLY yuklab olish</button></div>
+</section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s), S = 320, D = 3, RAD = Math.PI / 180;
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const nrm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const log = t => $('#log').textContent = t;
+let shots = [], stream = null, ori = null, absOK = false, lastF = null, aut = false, out = null;
+
+/* ---------- ko'rsatgich (eksport fayliga ham shu funksiya joylanadi) ---------- */
+function viewer(cv) {
+  const x = cv.getContext('2d'); let X, Y, Z, A, n = 0, sv = .02, R = 1, ry = .6, rx = -.3, z = 1, drag = false, lx = 0, ly = 0, auto = true, W = 0, H = 0, img, u32, zb, pd = 0;
+  const ptr = new Map();
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptr.set(e.pointerId, e); drag = true; auto = false; lx = e.clientX; ly = e.clientY; });
+  cv.addEventListener('pointermove', e => {
+    if (!ptr.has(e.pointerId)) return; ptr.set(e.pointerId, e);
+    if (ptr.size === 2) { const [a, b] = [...ptr.values()], d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); if (pd) z = Math.max(.3, Math.min(6, z * d / pd)); pd = d; return; }
+    ry += (e.clientX - lx) * .01; rx = Math.max(-1.5, Math.min(1.5, rx + (e.clientY - ly) * .01)); lx = e.clientX; ly = e.clientY;
+  });
+  const up = e => { ptr.delete(e.pointerId); pd = 0; if (!ptr.size) drag = false; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); z = Math.max(.3, Math.min(6, z * (e.deltaY < 0 ? 1.1 : .9))); }, { passive: false });
+  cv.addEventListener('dblclick', () => auto = !auto);
+  function draw() {
+    const dpr = Math.min(devicePixelRatio || 1, 1.5), w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
+    if (w && h && n) {
+      if (w !== W || h !== H) { W = cv.width = w; H = cv.height = h; img = x.createImageData(W, H); u32 = new Uint32Array(img.data.buffer); zb = new Float32Array(W * H); }
+      if (auto && !drag) ry += .006;
+      u32.fill(0xFF1A1616); zb.fill(-1e9);
+      const sc = Math.min(W, H) * .45 * z / R, ps = Math.max(1, Math.round(sv * sc * 1.3));
+      const cr_ = Math.cos(ry), sr = Math.sin(ry), cx = Math.cos(rx), sx = Math.sin(rx);
+      for (let i = 0; i < n; i++) {
+        const px = X[i], py = Y[i], pz = Z[i], a = px * cr_ + pz * sr, b = -px * sr + pz * cr_, zz = py * sx + b * cx;
+        const sxp = (W / 2 + a * sc) | 0, syp = (H / 2 - (py * cx - b * sx) * sc) | 0;
+        const nx = (A[6 * i + 3] - 128) / 127, ny = (A[6 * i + 4] - 128) / 127, nz = (A[6 * i + 5] - 128) / 127;
+        const na = nx * cr_ + nz * sr, nb = -nx * sr + nz * cr_, nyy = ny * cx - nb * sx, nzz = ny * sx + nb * cx;
+        const l = Math.max(0, na * .3 + nyy * .4 + nzz * .86), f = .5 + .7 * l;
+        const col = (255 << 24) | (Math.min(255, A[6 * i + 2] * f) << 16) | (Math.min(255, A[6 * i + 1] * f) << 8) | Math.min(255, A[6 * i] * f);
+        for (let dy = 0; dy < ps; dy++) { const yy = syp + dy; if (yy < 0 || yy >= H) continue; for (let dx = 0; dx < ps; dx++) { const xx = sxp + dx; if (xx < 0 || xx >= W) continue; const k = yy * W + xx; if (zz > zb[k]) { zb[k] = zz; u32[k] = col; } } }
+      }
+      x.putImageData(img, 0, 0);
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+  return {
+    set(u8, cnt, s) {
+      n = cnt; sv = s; const P = new Int16Array(u8.buffer, u8.byteOffset, 3 * n); A = u8.subarray(6 * n);
+      let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+      for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) { const v = P[3 * i + c] / 16000; if (v < lo[c]) lo[c] = v; if (v > hi[c]) hi[c] = v; }
+      const m = [0, 1, 2].map(c => (lo[c] + hi[c]) / 2); R = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2 || 1;
+      X = new Float32Array(n); Y = new Float32Array(n); Z = new Float32Array(n);
+      for (let i = 0; i < n; i++) { X[i] = P[3 * i] / 16000 - m[0]; Y[i] = P[3 * i + 1] / 16000 - m[1]; Z[i] = P[3 * i + 2] / 16000 - m[2]; }
+    }
+  };
+}
+const vw = viewer($('#view'));
+
+/* ---------- jismni fondan ajratish (rang gistogrammasi + bog'langan soha) ---------- */
+function seg(d, w, h) {
+  const N = w * h, B = new Uint16Array(N);
+  for (let i = 0; i < N; i++) B[i] = ((d[i * 4] >> 4) << 8) | (d[i * 4 + 1] & 0xf0) | (d[i * 4 + 2] >> 4);
+  const cx = w >> 1, cy = h >> 1, r2 = (Math.min(w, h) * .18) ** 2, bd = Math.round(Math.min(w, h) * .05);
+  let L = new Uint8Array(N);
+  for (let it = 0; it < 4; it++) {
+    const F = new Float32Array(4096).fill(.3), K = new Float32Array(4096).fill(.3); let nf = 0, nb = 0;
+    for (let y = 0; y < h; y++) for (let xx = 0; xx < w; xx++) {
+      const i = y * w + xx;
+      if (it === 0) { if ((xx - cx) ** 2 + (y - cy) ** 2 < r2) { F[B[i]]++; nf++; } else if (xx < bd || y < bd || xx >= w - bd || y >= h - bd) { K[B[i]]++; nb++; } }
+      else if (L[i]) { F[B[i]]++; nf++; } else { K[B[i]]++; nb++; }
+    }
+    const sf = nf + 1229 || 1, sk = nb + 1229 || 1;
+    for (let i = 0; i < N; i++) { const a = F[B[i]] / sf, b = K[B[i]] / sk; L[i] = a / (a + b) > .5 ? 1 : 0; }
+    L = comp(L, w, h, cx, cy); L = fill(L, w, h); L = smooth(L, w, h);
+  }
+  return L;
+}
+function comp(L, w, h, cx, cy) {
+  const N = w * h, O = new Uint8Array(N), q = new Int32Array(N); let s = -1;
+  for (let r = 0; r < w / 2 && s < 0; r += 2) for (let a = 0; a < 8; a++) { const x = cx + Math.round(r * Math.cos(a * .785)), y = cy + Math.round(r * Math.sin(a * .785)); if (x >= 0 && y >= 0 && x < w && y < h && L[y * w + x]) { s = y * w + x; break; } }
+  if (s < 0) return O;
+  let a = 0, b = 0; q[b++] = s; O[s] = 1;
+  while (a < b) {
+    const i = q[a++], x = i % w, y = (i / w) | 0;
+    if (x > 0 && L[i - 1] && !O[i - 1]) { O[i - 1] = 1; q[b++] = i - 1; }
+    if (x < w - 1 && L[i + 1] && !O[i + 1]) { O[i + 1] = 1; q[b++] = i + 1; }
+    if (y > 0 && L[i - w] && !O[i - w]) { O[i - w] = 1; q[b++] = i - w; }
+    if (y < h - 1 && L[i + w] && !O[i + w]) { O[i + w] = 1; q[b++] = i + w; }
+  }
+  return O;
+}
+function fill(L, w, h) {
+  const N = w * h, V = new Uint8Array(N), q = new Int32Array(N); let a = 0, b = 0;
+  const push = i => { if (!L[i] && !V[i]) { V[i] = 1; q[b++] = i; } };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); } for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (a < b) { const i = q[a++], x = i % w, y = (i / w) | 0; if (x > 0) push(i - 1); if (x < w - 1) push(i + 1); if (y > 0) push(i - w); if (y < h - 1) push(i + w); }
+  const O = new Uint8Array(N); for (let i = 0; i < N; i++) O[i] = V[i] ? 0 : 1; return O;
+}
+function smooth(L, w, h) {
+  const O = new Uint8Array(w * h);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { let s = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += L[(y + dy) * w + x + dx]; O[y * w + x] = s >= 5 ? 1 : 0; }
+  return O;
+}
+function erode(L, w, h) {
+  const O = new Uint8Array(w * h);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { const i = y * w + x; O[i] = L[i] && L[i - 1] && L[i + 1] && L[i - w] && L[i + w] ? 1 : 0; }
+  return O;
+}
+
+/* ---------- kamera va sensor ---------- */
+function pose([a, b, g]) {
+  const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b), cg = Math.cos(g), sg = Math.sin(g);
+  const Xd = [ca * cg - sa * sb * sg, sa * cg + ca * sb * sg, -cb * sg], Yd = [-sa * cb, ca * cb, sb], Zn = [-(sg * ca + sb * cg * sa), -(sg * sa - sb * cg * ca), -cb * cg];
+  const c = v => [v[0], v[2], -v[1]];
+  return { r: c(Xd), u: c(Yd), f: c(Zn) };
+}
+function onOri(e, abs) {
+  if (e.alpha == null) return; if (abs) absOK = true; else if (absOK) return;
+  ori = [e.alpha * RAD, e.beta * RAD, e.gamma * RAD];
+}
+function drawRing(p) {
+  const c = $('#ring').getContext('2d'); c.clearRect(0, 0, 96, 96);
+  c.strokeStyle = '#888'; c.beginPath(); c.arc(48, 48, 42, 0, 7); c.stroke(); c.beginPath(); c.arc(48, 48, 21, 0, 7); c.stroke();
+  const dt = (q, col, r) => { const d = [-q.f[0], -q.f[1], -q.f[2]], az = Math.atan2(d[0], d[2]), el = Math.asin(d[1]), rr = 42 * (1 - Math.max(0, el) / (Math.PI / 2)); c.fillStyle = col; c.beginPath(); c.arc(48 + rr * Math.sin(az), 48 - rr * Math.cos(az), r, 0, 7); c.fill(); };
+  shots.forEach(s => s.pose && dt(s.pose, '#3ecf9b', 3)); if (p) dt(p, '#ff5a5a', 4);
+}
+const camLog = t => { $('#clog').textContent = t; log(t); };
+let sensorsOn = false;
+function camError(e) {
+  const n = e && e.name;
+  if (n === 'NotAllowedError' || n === 'SecurityError') camLog("Kamera ruxsati berilmadi yoki bu oynada bloklangan. Chrome manzil qatoridagi 🔒 belgisi → Ruxsatlar → Kamera → «Ruxsat berish», so'ng sahifani yangilang. Ilova ichidagi oynada ochgan bo'lsangiz, havolani Chrome yoki Safari'da oching. Hozircha «Tizim kamerasi» tugmasi ishlaydi.");
+  else if (n === 'NotFoundError' || n === 'OverconstrainedError') camLog("Kamera topilmadi. «Tizim kamerasi» yoki «Galereyadan» tugmasidan foydalaning.");
+  else if (n === 'NotReadableError' || n === 'AbortError') camLog("Kamerani boshqa ilova ishlatyapti. Uni yoping va qayta urinib ko'ring.");
+  else camLog("Kamera ochilmadi (" + (n || 'xato') + "). «Tizim kamerasi» tugmasidan foydalaning.");
+}
+async function openCam() {
+  $('#clog').textContent = '';
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.isSecureContext) return camLog("Bu brauzerda kamera API yo'q. Chrome/Safari'da oching yoki «Tizim kamerasi» tugmasidan foydalaning.");
+  try { if (window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) { const r = await DeviceOrientationEvent.requestPermission(); if (r !== 'granted') log("Harakat sensori ruxsati berilmadi: model sifati pasayadi."); } } catch (e) { }
+  if (!sensorsOn) { addEventListener('deviceorientationabsolute', e => onOri(e, true), true); addEventListener('deviceorientation', e => onOri(e, false), true); sensorsOn = true; }
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  const tries = [{ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } } }, { video: { facingMode: 'environment' } }, { video: true }];
+  let err = null; stream = null;
+  for (const c of tries) {
+    try { stream = await navigator.mediaDevices.getUserMedia({ ...c, audio: false }); err = null; break; }
+    catch (e) { err = e; if (e.name === 'NotAllowedError' || e.name === 'SecurityError') break; }
+  }
+  if (!stream) return camError(err);
+  const v = $('#vid'); v.srcObject = stream; v.hidden = false; try { await v.play(); } catch (e) { }
+  $('#ch').hidden = false; $('#ring').hidden = false; $('#snap').disabled = false; $('#auto').disabled = false;
+  log("Kamera yoqildi.");
+  setTimeout(() => { if (stream && !ori) camLog("Harakat sensori ishlamayapti: suratlar teng burchak bilan joylashtiriladi, avto rejim o'chiq. Sensor ruxsati va Chrome'dan foydalaning."); }, 2000);
+}
+$('#camBtn').onclick = openCam;
+document.addEventListener('visibilitychange', () => { if (!document.hidden && stream && stream.getVideoTracks()[0] && stream.getVideoTracks()[0].readyState === 'ended') openCam(); });
+const snap = () => addImg($('#vid'), ori ? pose(ori) : null);
+$('#snap').onclick = snap;
+$('#auto').onclick = () => { aut = !aut; $('#auto').textContent = "Avto: " + (aut ? 'yoqiq' : "o'chiq"); if (aut && !ori) log("Sensor ma'lumoti yo'q: avto rejim ishlamaydi. Qo'lda suratga oling."); };
+setInterval(() => {
+  if (!stream || !ori) return; const p = pose(ori); drawRing(p);
+  if (aut && shots.length < 72 && lastF && dot(p.f, lastF) > .9998 && shots.every(s => !s.pose || dot(s.pose.f, p.f) < Math.cos(14 * RAD))) snap();
+  lastF = p.f;
+}, 250);
+$('#nat').onchange = $('#file').onchange = async e => {
+  const fs = [...e.target.files].sort((a, b) => a.name.localeCompare(b.name)); e.target.value = '';
+  for (const f of fs) { const im = new Image(); im.src = URL.createObjectURL(f); try { await im.decode(); addImg(im, null); } catch (_) { } URL.revokeObjectURL(im.src); await new Promise(r => setTimeout(r)); }
+};
+function addImg(src, p) {
+  const w0 = src.videoWidth || src.naturalWidth, h0 = src.videoHeight || src.naturalHeight, k = S / Math.max(w0, h0);
+  const c = document.createElement('canvas'), w = c.width = Math.round(w0 * k), h = c.height = Math.round(h0 * k), cx = c.getContext('2d', { willReadFrequently: true });
+  cx.drawImage(src, 0, 0, w, h);
+  const id = cx.getImageData(0, 0, w, h), d = id.data, m = seg(d, w, h);
+  let x0 = w, x1 = -1, y0 = h, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (m[y * w + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const ok = x1 > x0 && y1 > y0 && (x1 - x0) * (y1 - y0) > w * h * .01;
+  const sh = { w, h, d, m, me: erode(erode(m, w, h), w, h), pose: p, on: ok, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, rad: ok ? Math.hypot(x1 - x0, y1 - y0) / 2 / h : 0 };
+  for (let i = 0; i < w * h; i++) if (!m[i]) { id.data[i * 4] *= .3; id.data[i * 4 + 1] *= .3; id.data[i * 4 + 2] *= .3; }
+  cx.putImageData(id, 0, 0); c.classList.toggle('off', !ok);
+  c.onclick = () => { sh.on = !sh.on; c.classList.toggle('off', !sh.on); upd(); };
+  shots.push(sh); $('#th').appendChild(c); upd();
+}
+function upd() { $('#cnt').textContent = shots.length + " ta surat, ishlatiladi: " + shots.filter(s => s.on).length + "."; }
+$('#clr').onclick = () => { shots = []; $('#th').innerHTML = ''; upd(); drawRing(null); };
+[['gres', 'rv'], ['tol', 'ov'], ['scl', 'sv'], ['elv', 'ev']].forEach(([a, b]) => $('#' + a).oninput = () => $('#' + b).textContent = $('#' + a).value);
+
+/* ---------- 3D qayta tiklash ---------- */
+async function build() {
+  const act = shots.filter(s => s.on);
+  if (act.length < 6) return log("Kamida 6 ta yaroqli surat kerak (20–40 tavsiya etiladi).");
+  const G = +$('#gres').value, tol = +$('#tol').value, mul = +$('#scl').value, el0 = +$('#elv').value * RAD;
+  $('#go').disabled = true; $('#pg').hidden = false;
+  const m0 = act.filter(s => !s.pose).length; let k0 = 0;
+  const V = act.map(s => {
+    let p = s.pose;
+    if (!p) { const th = 2 * Math.PI * (k0++) / m0, f = [-Math.sin(th) * Math.cos(el0), -Math.sin(el0), -Math.cos(th) * Math.cos(el0)], r = nrm(cr(f, [0, 1, 0])); p = { r, u: cr(r, f), f }; }
+    return { ...s, r: p.r, u: p.u, f: p.f };
+  });
+  const F = mul * Math.max(...V.map(v => v.rad)) * D / .8;
+  V.forEach(v => v.Fh = F * v.h);
+  async function carve(lo, s, N, tag, p0, p1) {
+    const occ = new Uint8Array(N[0] * N[1] * N[2]);
+    for (let iz = 0; iz < N[2]; iz++) {
+      const Z = lo[2] + (iz + .5) * s;
+      for (let iy = 0; iy < N[1]; iy++) {
+        const Y = lo[1] + (iy + .5) * s;
+        for (let ix = 0; ix < N[0]; ix++) {
+          const X = lo[0] + (ix + .5) * s; let miss = 0;
+          for (const v of V) {
+            const kk = v.Fh / (X * v.f[0] + Y * v.f[1] + Z * v.f[2] + D);
+            const px = v.cx + kk * (X * v.r[0] + Y * v.r[1] + Z * v.r[2]), py = v.cy - kk * (X * v.u[0] + Y * v.u[1] + Z * v.u[2]);
+            if (px < 0 || py < 0 || px >= v.w || py >= v.h) continue;
+            if (!v.m[(py | 0) * v.w + (px | 0)] && ++miss > tol) break;
+          }
+          if (miss <= tol) occ[(iz * N[1] + iy) * N[0] + ix] = 1;
+        }
+      }
+      $('#pg').value = p0 + (p1 - p0) * (iz + 1) / N[2]; log(tag + Math.round((iz + 1) / N[2] * 100) + '%');
+      await new Promise(r => setTimeout(r));
+    }
+    return occ;
+  }
+  const s1 = 2.4 / 36, N1 = [36, 36, 36], lo1 = [-1.2, -1.2, -1.2], o1 = await carve(lo1, s1, N1, "Dastlabki qirqish… ", 0, .15);
+  let mn = [99, 99, 99], mx = [-1, -1, -1];
+  for (let z = 0; z < 36; z++) for (let y = 0; y < 36; y++) for (let x = 0; x < 36; x++) if (o1[(z * 36 + y) * 36 + x]) { const q = [x, y, z]; for (let c = 0; c < 3; c++) { if (q[c] < mn[c]) mn[c] = q[c]; if (q[c] > mx[c]) mx[c] = q[c]; } }
+  if (mx[0] < 0) { $('#go').disabled = false; $('#pg').hidden = true; return log("Model bo'sh chiqdi. «Xato bardoshliligi»ni oshiring, masshtabni o'zgartiring yoki yomon ajratilgan rasmlarni o'chiring."); }
+  const lo = [0, 1, 2].map(c => lo1[c] + (mn[c] - 1.5) * s1), ext = [0, 1, 2].map(c => (mx[c] - mn[c] + 4) * s1), s = Math.max(...ext) / G, N = ext.map(e => Math.ceil(e / s));
+  const occ = await carve(lo, s, N, "Aniq qirqish… ", .15, .85), [nx, ny, nz] = N;
+  const get = (x, y, z) => x < 0 || y < 0 || z < 0 || x >= nx || y >= ny || z >= nz ? 0 : occ[(z * ny + y) * nx + x];
+  const offs = []; for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) for (let c = -2; c <= 2; c++) if (a * a + b * b + c * c <= 5) offs.push([a, b, c]);
+  const pos = [], att = [];
+  for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    if (!occ[(z * ny + y) * nx + x]) continue;
+    if (get(x + 1, y, z) && get(x - 1, y, z) && get(x, y + 1, z) && get(x, y - 1, z) && get(x, y, z + 1) && get(x, y, z - 1)) continue;
+    let g = [0, 0, 0]; for (const o of offs) if (get(x + o[0], y + o[1], z + o[2])) { g[0] -= o[0]; g[1] -= o[1]; g[2] -= o[2]; }
+    const n = (g[0] || g[1] || g[2]) ? nrm(g) : [0, 1, 0], X = lo[0] + (x + .5) * s, Y = lo[1] + (y + .5) * s, Z = lo[2] + (z + .5) * s;
+    let r = 0, gg = 0, b = 0, ws = 0;
+    for (const pass of [1, 0]) {
+      for (const v of V) {
+        const wt = pass ? Math.max(0, -dot(n, v.f)) ** 2 : .01; if (wt < .02 && pass) continue;
+        const kk = v.Fh / (X * v.f[0] + Y * v.f[1] + Z * v.f[2] + D), px = (v.cx + kk * (X * v.r[0] + Y * v.r[1] + Z * v.r[2])) | 0, py = (v.cy - kk * (X * v.u[0] + Y * v.u[1] + Z * v.u[2])) | 0;
+        if (px < 0 || py < 0 || px >= v.w || py >= v.h || !v.me[py * v.w + px]) continue;
+        const j = (py * v.w + px) * 4; r += v.d[j] * wt; gg += v.d[j + 1] * wt; b += v.d[j + 2] * wt; ws += wt;
+      }
+      if (ws) break;
+    }
+    pos.push(Math.round(X * 16000), Math.round(Y * 16000), Math.round(Z * 16000));
+    att.push(ws ? r / ws : 128, ws ? gg / ws : 128, ws ? b / ws : 128, Math.round(n[0] * 127) + 128, Math.round(n[1] * 127) + 128, Math.round(n[2] * 127) + 128);
+  }
+  $('#go').disabled = false; $('#pg').hidden = true;
+  const cnt = pos.length / 3, buf = new Uint8Array(12 * cnt);
+  buf.set(new Uint8Array(Int16Array.from(pos).buffer), 0); buf.set(Uint8Array.from(att), 6 * cnt);
+  out = { buf, cnt, s }; vw.set(buf, cnt, s); $('#dl').disabled = false; $('#dp').disabled = false;
+  log("Tayyor: " + cnt + " nuqta, " + act.length + " ta surat. Model buzuq chiqsa, «Masshtab tuzatish»ni o'zgartirib yoki yomon rasmlarni o'chirib qayta yarating.");
+}
+$('#go').onclick = build;
+
+/* ---------- avtomatik ruxsat so'rash ---------- */
+let camBusy = false;
+const autoCam = async () => { if (camBusy || stream) return; camBusy = true; try { await openCam(); } finally { camBusy = false; } };
+addEventListener('load', () => setTimeout(autoCam, 400));
+document.addEventListener('pointerdown', () => {
+  if (!stream) autoCam();
+  else if (!ori && window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) DeviceOrientationEvent.requestPermission().catch(() => { });
+});
+
+/* ---------- eksport ---------- */
+function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+$('#dl').onclick = () => {
+  let bin = ''; for (let i = 0; i < out.buf.length; i += 8192) bin += String.fromCharCode.apply(null, out.buf.subarray(i, i + 8192));
+  const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>3D model</title><style>html,body{margin:0;height:100%;background:#161a1a}canvas{width:100%;height:100%;display:block;touch-action:none}</style></head><body><canvas id="c"></canvas><script>const B="' + btoa(bin) + '",U=Uint8Array.from(atob(B),c=>c.charCodeAt(0));(' + viewer.toString() + ')(document.getElementById("c")).set(U,' + out.cnt + ',' + out.s + ')<\/script></body></html>';
+  save(new Blob([html], { type: 'text/html' }), 'model3d.html');
+};
+$('#dp').onclick = () => {
+  const n = out.cnt, P = new Int16Array(out.buf.buffer, 0, 3 * n), A = out.buf.subarray(6 * n), hd = 'ply\nformat binary_little_endian 1.0\nelement vertex ' + n + '\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n';
+  const b = new ArrayBuffer(hd.length + 15 * n), dv = new DataView(b); for (let i = 0; i < hd.length; i++) dv.setUint8(i, hd.charCodeAt(i));
+  for (let i = 0, o = hd.length; i < n; i++, o += 15) { dv.setFloat32(o, P[3 * i] / 16000, true); dv.setFloat32(o + 4, P[3 * i + 1] / 16000, true); dv.setFloat32(o + 8, P[3 * i + 2] / 16000, true); dv.setUint8(o + 12, A[6 * i]); dv.setUint8(o + 13, A[6 * i + 1]); dv.setUint8(o + 14, A[6 * i + 2]); }
+  save(new Blob([b], { type: 'application/octet-stream' }), 'model3d.ply');
+};
+</script>
+</body>
+</html>
